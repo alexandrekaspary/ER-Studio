@@ -56,6 +56,16 @@ function foreignKeyConstraintName(table, field) {
   return `${base.slice(0, 54)}_${suffix}`.slice(0, 63)
 }
 
+function checkConstraintName(table, field) {
+  const suffix = shortHash(`${table.id || table.name}:${field.id || field.name}`)
+  const base = `ck_${constraintToken(table.name)}_${constraintToken(field.name)}`
+  return `${base.slice(0, 54)}_${suffix}`.slice(0, 63)
+}
+
+function checkExpression(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function createTableSql(table) {
   const fields = Array.isArray(table.fields) ? table.fields : []
   const columns = fields.map((field) => {
@@ -74,6 +84,13 @@ function createTableSql(table) {
   fields
     .filter((field) => field.unique && !field.primaryKey)
     .forEach((field) => columns.push(`UNIQUE (${quoteIdentifier(field.name)})`))
+
+  fields.forEach((field) => {
+    const expression = checkExpression(field.checkConstraint)
+    if (expression) {
+      columns.push(`CONSTRAINT ${quoteIdentifier(checkConstraintName(table, field))} CHECK (${expression})`)
+    }
+  })
 
   const definition = columns.length > 0
     ? `\n  ${columns.join(',\n  ')}\n`

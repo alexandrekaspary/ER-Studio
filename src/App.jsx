@@ -87,6 +87,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: true,
           unique: false,
+          checkConstraint: '',
           comment: 'Identificador único do cliente.',
           notes: '',
           isForeignKey: false,
@@ -101,6 +102,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          checkConstraint: '',
           comment: 'Nome completo ou razão social.',
           notes: '',
           isForeignKey: false,
@@ -115,6 +117,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          checkConstraint: '',
           comment: 'E-mail usado para contato.',
           notes: 'Pode receber uma restrição UNIQUE conforme a regra de negócio.',
           isForeignKey: false,
@@ -146,6 +149,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: true,
           unique: false,
+          checkConstraint: '',
           comment: 'Identificador único do pedido.',
           notes: '',
           isForeignKey: false,
@@ -160,6 +164,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          checkConstraint: '',
           comment: 'Cliente responsável pelo pedido.',
           notes: '',
           isForeignKey: true,
@@ -179,6 +184,7 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          checkConstraint: '',
           comment: 'Momento de criação do pedido.',
           notes: 'Armazenado com fuso horário.',
           isForeignKey: false,
@@ -1707,6 +1713,11 @@ function App() {
                     <label className="form-label default-value-label">
                       Valor padrão
                       <input value={selectedField.defaultValue} onChange={(event) => patchField(selectedTable.id, selectedField.id, { defaultValue: event.target.value })} placeholder="ex.: now()" />
+                    </label>
+                    <label className="form-label check-constraint-label">
+                      Restrição (CHECK)
+                      <input value={selectedField.checkConstraint || ''} onChange={(event) => patchField(selectedTable.id, selectedField.id, { checkConstraint: event.target.value })} placeholder="ex.: quantidade > 0" />
+                      <small className="form-help">Informe somente a expressão, sem escrever <code>CHECK</code>.</small>
                     </label>
                   </section>
 

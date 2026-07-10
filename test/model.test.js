@@ -27,6 +27,7 @@ function createModelFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            checkConstraint: 'id IS NOT NULL',
             comment: 'Identificador público do cliente.',
             notes: 'Gerado pela extensão pgcrypto.',
             isForeignKey: false,
@@ -63,6 +64,7 @@ function createModelFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            checkConstraint: '',
             comment: '',
             notes: '',
             isForeignKey: false,
@@ -77,6 +79,7 @@ function createModelFixture() {
             nullable: false,
             primaryKey: false,
             unique: true,
+            checkConstraint: '',
             comment: 'Cliente responsável pelo pedido.',
             notes: 'Índice adicional pode ser necessário para consultas frequentes.',
             isForeignKey: true,
@@ -122,6 +125,7 @@ test('importa o formato legado com relações separadas', () => {
   delete legacy.tables[0].notes
   delete legacy.tables[0].indexes
   delete legacy.tables[0].fields[0].unique
+  delete legacy.tables[0].fields[0].checkConstraint
   delete legacy.tables[0].fields[0].comment
   delete legacy.tables[0].fields[0].notes
   legacy.tables[1].fields[1].isForeignKey = false
@@ -147,6 +151,7 @@ test('importa o formato legado com relações separadas', () => {
   assert.equal(imported.notes, '')
   assert.equal(imported.tables[0].comment, '')
   assert.equal(imported.tables[0].fields[0].notes, '')
+  assert.equal(imported.tables[0].fields[0].checkConstraint, '')
   assert.deepEqual(imported.tables[0].indexes, [])
 })
 
@@ -203,6 +208,8 @@ test('rejeita versões, relações e FKs inválidas', () => {
   incompleteCompositeUnique.tables[1].indexes[1].fieldIds = ['orders_customer_id']
   const longIndexName = createModelFixture()
   longIndexName.tables[1].indexes[0].name = 'x'.repeat(64)
+  const invalidCheckConstraint = createModelFixture()
+  invalidCheckConstraint.tables[0].fields[0].checkConstraint = ['id > 0']
 
   assert.throws(() => normalizeModel(missingTables), /lista de tabelas/)
   assert.throws(() => normalizeModel(unsupportedVersion), /não é compatível/)
@@ -214,4 +221,5 @@ test('rejeita versões, relações e FKs inválidas', () => {
   assert.throws(() => normalizeModel(duplicateIndexName), /índice .*duplicado/)
   assert.throws(() => normalizeModel(incompleteCompositeUnique), /UNIQUE .*ao menos dois campos/)
   assert.throws(() => normalizeModel(longIndexName), /63 caracteres/)
+  assert.throws(() => normalizeModel(invalidCheckConstraint), /"checkConstraint"/)
 })

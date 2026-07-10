@@ -35,6 +35,7 @@ function createSqlFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            checkConstraint: '',
             comment: 'Identificador do pedido.',
             foreignKey: null,
           },
@@ -47,6 +48,7 @@ function createSqlFixture() {
             nullable: false,
             primaryKey: false,
             unique: false,
+            checkConstraint: 'cliente_id IS NOT NULL',
             comment: '',
             foreignKey: {
               tableId: 'customers',
@@ -72,6 +74,7 @@ function createSqlFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            checkConstraint: '',
             comment: '',
             foreignKey: null,
           },
@@ -84,6 +87,7 @@ function createSqlFixture() {
             nullable: false,
             primaryKey: false,
             unique: true,
+            checkConstraint: '',
             comment: 'E-mail principal.',
             foreignKey: null,
           },
@@ -102,6 +106,7 @@ test('gera SQL PostgreSQL com FKs após todas as tabelas e comentários', () => 
   assert.match(sql, /"email" VARCHAR\(255\) NOT NULL/)
   assert.match(sql, /PRIMARY KEY \("id"\)/)
   assert.match(sql, /UNIQUE \("email"\)/)
+  assert.match(sql, /CONSTRAINT "ck_pedidos_cliente_id_.*" CHECK \(cliente_id IS NOT NULL\)/)
   assert.match(sql, /ALTER TABLE "pedidos"\n  ADD CONSTRAINT "fk_pedidos_cliente_id_/)
   assert.match(sql, /FOREIGN KEY \("cliente_id"\)\n  REFERENCES "clientes" \("id"\)\n  ON DELETE CASCADE\n  ON UPDATE RESTRICT;/)
   assert.match(sql, /CREATE INDEX "idx_pedidos_cliente_id_id" ON "pedidos" \("cliente_id", "id"\);/)
@@ -127,6 +132,7 @@ test('protege identificadores e normaliza valores inválidos sem quebrar o scrip
         nullable: true,
         primaryKey: false,
         unique: false,
+        checkConstraint: '',
         foreignKey: null,
       }],
     }],

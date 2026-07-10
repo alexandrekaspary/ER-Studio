@@ -8,7 +8,7 @@ Editor visual para criar e organizar modelos entidade-relacionamento (ER) de ban
 
 - Criação, edição, recolhimento, arraste e exclusão de tabelas.
 - Cor e nome por tabela.
-- Campos com nome, tipo PostgreSQL, tamanho, valor padrão, nulidade, chave primária, `UNIQUE` e chave estrangeira.
+- Campos com nome, tipo PostgreSQL, tamanho, valor padrão, nulidade, chave primária, `UNIQUE`, restrição `CHECK` e chave estrangeira.
 - Índices por tabela e restrições `UNIQUE` compostas, com ordem de colunas configurável.
 - Relações `N:1` geradas a partir das chaves estrangeiras, com ações `ON DELETE` e `ON UPDATE`, e desenhadas no diagrama.
 - Comentários e observações para o modelo, tabelas e campos.
@@ -48,7 +48,7 @@ O Vite exibirá a URL local no terminal, normalmente `http://localhost:5173`.
 
 1. Clique em **Nova tabela** e informe nome e cor.
 2. Selecione a tabela criada para adicionar ou editar campos.
-3. Em cada campo, defina tipo, tamanho, valor padrão, nulidade, chave primária e **Valor único** quando necessário.
+3. Em cada campo, defina tipo, tamanho, valor padrão, nulidade, chave primária, **Valor único** e uma expressão de **Restrição (CHECK)** quando necessário.
 4. Marque **Chave estrangeira**, escolha a tabela e o campo referenciados e defina as ações `ON DELETE` e `ON UPDATE`. A relação aparece automaticamente no diagrama.
 5. Use **Comentário** para documentar a tabela ou o campo no PostgreSQL. Use **Observações** para decisões e lembretes mantidos no modelo.
 6. Na propriedade da tabela, crie índices comuns ou uma restrição **UNIQUE composta**. A ordem dos campos é preservada no SQL.
@@ -95,6 +95,7 @@ Exemplo reduzido:
           "nullable": false,
           "primaryKey": true,
           "unique": false,
+          "checkConstraint": "",
           "comment": "Identificador público do cliente.",
           "notes": "Gerado por pgcrypto.",
           "isForeignKey": false,
@@ -128,6 +129,7 @@ Exemplo reduzido:
           "nullable": false,
           "primaryKey": false,
           "unique": true,
+          "checkConstraint": "cliente_id IS NOT NULL",
           "comment": "Cliente responsável pelo pedido.",
           "notes": "",
           "isForeignKey": true,
@@ -161,6 +163,7 @@ Exemplo reduzido:
 - A versão suportada é `1`.
 - Toda tabela e todo campo precisam de nome; IDs duplicados são recusados.
 - `unique`, quando informado, precisa ser booleano.
+- `checkConstraint`, quando informado, precisa ser um texto com a expressão `CHECK` sem a palavra `CHECK`; campos ausentes em JSONs antigos são normalizados como texto vazio.
 - `notes` e `comment`, quando informados, precisam ser textos. Campos ausentes em JSONs antigos são normalizados como texto vazio.
 - `indexes` é opcional em cada tabela. Cada item precisa ter nome de até 63 caracteres, IDs de campos da própria tabela e `unique` booleano. Índices comuns aceitam um ou mais campos; uma restrição `UNIQUE` composta exige pelo menos dois.
 - Uma FK completa precisa informar `tableId` e `fieldId`, ambos existentes no modelo. As ações `onDelete` e `onUpdate` aceitam `NO ACTION`, `RESTRICT`, `CASCADE`, `SET NULL` e `SET DEFAULT`; quando ausentes, o padrão é `NO ACTION`.
@@ -174,7 +177,9 @@ Os testes automatizados cobrem round-trip de exportação/importação, relaçõ
 
 Use **Gerar SQL** no topo da aplicação para conferir o script, copiá-lo ou baixá-lo como `.sql`. O gerador cria todas as tabelas antes de adicionar as chaves estrangeiras, portanto funciona mesmo que a ordem visual das tabelas seja diferente da ordem das referências ou existam referências cíclicas.
 
-O script inclui tipos, tamanhos, `DEFAULT`, `NOT NULL`, `PRIMARY KEY`, `UNIQUE` simples e composto, índices, chaves estrangeiras, ações `ON DELETE`/`ON UPDATE` e `COMMENT ON TABLE`/`COMMENT ON COLUMN`. As observações são documentação do editor: permanecem no JSON e não alteram o banco.
+O script inclui tipos, tamanhos, `DEFAULT`, `NOT NULL`, `PRIMARY KEY`, `UNIQUE` simples e composto, índices, restrições `CHECK`, chaves estrangeiras, ações `ON DELETE`/`ON UPDATE` e `COMMENT ON TABLE`/`COMMENT ON COLUMN`. As observações são documentação do editor: permanecem no JSON e não alteram o banco.
+
+Na propriedade **Restrição (CHECK)**, informe somente a expressão, por exemplo `quantidade > 0` ou `status IN ('ativo', 'inativo')`. Em PostgreSQL, uma restrição `CHECK` aceita valores `NULL`; marque o campo como não nulo quando a regra também exigir um valor.
 
 ## Docker
 

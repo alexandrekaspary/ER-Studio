@@ -930,6 +930,23 @@ h2 {
   margin-bottom: 0;
 }
 
+.form-help {
+  color: #8291a0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.form-help code {
+  padding: 1px 3px;
+  color: #4d667d;
+  background: #eef3f6;
+  border-radius: 2px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.95em;
+}
+
 .default-value-label {
   margin-top: 10px;
 }
