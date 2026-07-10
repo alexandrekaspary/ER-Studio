@@ -11,6 +11,20 @@ function createSqlFixture() {
         id: 'orders',
         name: 'pedidos',
         comment: 'Pedidos feitos pelos clientes.',
+        indexes: [
+          {
+            id: 'orders_customer_created_index',
+            name: 'idx_pedidos_cliente_id_id',
+            fieldIds: ['orders_customer_id', 'orders_id'],
+            unique: false,
+          },
+          {
+            id: 'orders_customer_unique',
+            name: 'uq_pedidos_cliente_id_id',
+            fieldIds: ['orders_customer_id', 'orders_id'],
+            unique: true,
+          },
+        ],
         fields: [
           {
             id: 'orders_id',
@@ -47,6 +61,7 @@ function createSqlFixture() {
         id: 'customers',
         name: 'clientes',
         comment: "Cadastro d'os clientes.",
+        indexes: [],
         fields: [
           {
             id: 'customers_id',
@@ -89,6 +104,8 @@ test('gera SQL PostgreSQL com FKs após todas as tabelas e comentários', () => 
   assert.match(sql, /UNIQUE \("email"\)/)
   assert.match(sql, /ALTER TABLE "pedidos"\n  ADD CONSTRAINT "fk_pedidos_cliente_id_/)
   assert.match(sql, /FOREIGN KEY \("cliente_id"\)\n  REFERENCES "clientes" \("id"\)\n  ON DELETE CASCADE\n  ON UPDATE RESTRICT;/)
+  assert.match(sql, /CREATE INDEX "idx_pedidos_cliente_id_id" ON "pedidos" \("cliente_id", "id"\);/)
+  assert.match(sql, /ALTER TABLE "pedidos"\n  ADD CONSTRAINT "uq_pedidos_cliente_id_id"\n  UNIQUE \("cliente_id", "id"\);/)
   assert.match(sql, /COMMENT ON TABLE "clientes" IS 'Cadastro d''os clientes\.';/)
   assert.match(sql, /COMMENT ON COLUMN "pedidos"\."id" IS 'Identificador do pedido\.';/)
   assert.match(sql, /Observações do modelo:/)
@@ -100,6 +117,7 @@ test('protege identificadores e normaliza valores inválidos sem quebrar o scrip
     tables: [{
       id: 'weird',
       name: 'usuários"arquivo',
+      indexes: [],
       fields: [{
         id: 'weird_id',
         name: 'código"externo',

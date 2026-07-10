@@ -15,6 +15,7 @@ function createModelFixture() {
         collapsed: true,
         comment: 'Cadastro de clientes.',
         notes: 'Dados sincronizados com o CRM.',
+        indexes: [],
         position: { x: 80, y: 120 },
         fields: [
           {
@@ -40,6 +41,17 @@ function createModelFixture() {
         collapsed: false,
         comment: 'Pedidos realizados pelos clientes.',
         notes: '',
+        indexes: [{
+          id: 'orders_customer_id_index',
+          name: 'idx_pedidos_cliente_id_id',
+          fieldIds: ['orders_customer_id', 'orders_id'],
+          unique: false,
+        }, {
+          id: 'orders_customer_id_unique',
+          name: 'uq_pedidos_cliente_id_id',
+          fieldIds: ['orders_customer_id', 'orders_id'],
+          unique: true,
+        }],
         position: { x: 480, y: 200 },
         fields: [
           {
@@ -108,6 +120,7 @@ test('importa o formato legado com relações separadas', () => {
   delete legacy.notes
   delete legacy.tables[0].comment
   delete legacy.tables[0].notes
+  delete legacy.tables[0].indexes
   delete legacy.tables[0].fields[0].unique
   delete legacy.tables[0].fields[0].comment
   delete legacy.tables[0].fields[0].notes
@@ -134,6 +147,7 @@ test('importa o formato legado com relações separadas', () => {
   assert.equal(imported.notes, '')
   assert.equal(imported.tables[0].comment, '')
   assert.equal(imported.tables[0].fields[0].notes, '')
+  assert.deepEqual(imported.tables[0].indexes, [])
 })
 
 test('normaliza e valida as ações de chave estrangeira', () => {
@@ -176,6 +190,19 @@ test('rejeita versões, relações e FKs inválidas', () => {
   invalidUnique.tables[1].fields[1].unique = 'sim'
   const invalidComment = createModelFixture()
   invalidComment.tables[0].comment = { texto: 'inválido' }
+  const invalidIndex = createModelFixture()
+  invalidIndex.tables[1].indexes[0].fieldIds = ['missing_field']
+  const duplicateIndexName = createModelFixture()
+  duplicateIndexName.tables[0].indexes = [{
+    id: 'customers_index',
+    name: 'idx_pedidos_cliente_id_id',
+    fieldIds: ['customers_id'],
+    unique: false,
+  }]
+  const incompleteCompositeUnique = createModelFixture()
+  incompleteCompositeUnique.tables[1].indexes[1].fieldIds = ['orders_customer_id']
+  const longIndexName = createModelFixture()
+  longIndexName.tables[1].indexes[0].name = 'x'.repeat(64)
 
   assert.throws(() => normalizeModel(missingTables), /lista de tabelas/)
   assert.throws(() => normalizeModel(unsupportedVersion), /não é compatível/)
@@ -183,4 +210,8 @@ test('rejeita versões, relações e FKs inválidas', () => {
   assert.throws(() => normalizeModel(numericForeignKey), /IDs em texto/)
   assert.throws(() => normalizeModel(invalidUnique), /"unique"/)
   assert.throws(() => normalizeModel(invalidComment), /"comment"/)
+  assert.throws(() => normalizeModel(invalidIndex), /campo inexistente/)
+  assert.throws(() => normalizeModel(duplicateIndexName), /índice .*duplicado/)
+  assert.throws(() => normalizeModel(incompleteCompositeUnique), /UNIQUE .*ao menos dois campos/)
+  assert.throws(() => normalizeModel(longIndexName), /63 caracteres/)
 })

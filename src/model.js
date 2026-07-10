@@ -36,6 +36,15 @@ export function emptyField() {
   }
 }
 
+export function emptyIndex() {
+  return {
+    id: makeId('index'),
+    name: '',
+    fieldIds: [],
+    unique: false,
+  }
+}
+
 export function getRelations(model) {
   return model.tables.flatMap((table) =>
     table.fields.flatMap((field) => {
@@ -140,6 +149,72 @@ function normalizeForeignKeyAction(value, label) {
   return action
 }
 
+function normalizeIndexes(rawIndexes, fields, tableName) {
+  if (rawIndexes === undefined || rawIndexes === null) return []
+  if (!Array.isArray(rawIndexes)) {
+    throw new Error(`A tabela "${tableName}" precisa usar uma lista de índices.`)
+  }
+
+  const availableFieldIds = new Set(fields.map((field) => field.id))
+  const indexIds = new Set()
+  const indexDefinitions = new Set()
+
+  return rawIndexes.map((rawIndex, indexPosition) => {
+    if (!rawIndex || typeof rawIndex !== 'object' || Array.isArray(rawIndex)) {
+      throw new Error(`O índice na posição ${indexPosition + 1} da tabela "${tableName}" é inválido.`)
+    }
+    if (typeof rawIndex.name !== 'string' || !rawIndex.name.trim()) {
+      throw new Error(`O índice na posição ${indexPosition + 1} da tabela "${tableName}" não tem nome.`)
+    }
+    if (rawIndex.name.trim().length > 63) {
+      throw new Error(`O nome do índice "${rawIndex.name}" da tabela "${tableName}" excede 63 caracteres.`)
+    }
+    if (!Array.isArray(rawIndex.fieldIds) || rawIndex.fieldIds.length === 0) {
+      throw new Error(`O índice "${rawIndex.name}" da tabela "${tableName}" precisa ter ao menos um campo.`)
+    }
+
+    const id = readId(rawIndex.id, 'index', `índice "${rawIndex.name}"`)
+    if (indexIds.has(id)) {
+      throw new Error(`O identificador do índice "${id}" está duplicado em "${tableName}".`)
+    }
+    indexIds.add(id)
+
+    const selectedFieldIds = new Set()
+    const fieldIds = rawIndex.fieldIds.map((rawFieldId) => {
+      if (typeof rawFieldId !== 'string' || !rawFieldId.trim()) {
+        throw new Error(`O índice "${rawIndex.name}" da tabela "${tableName}" possui um campo inválido.`)
+      }
+      const fieldId = rawFieldId.trim()
+      if (!availableFieldIds.has(fieldId)) {
+        throw new Error(`O índice "${rawIndex.name}" da tabela "${tableName}" aponta para um campo inexistente.`)
+      }
+      if (selectedFieldIds.has(fieldId)) {
+        throw new Error(`O índice "${rawIndex.name}" da tabela "${tableName}" repete um campo.`)
+      }
+      selectedFieldIds.add(fieldId)
+      return fieldId
+    })
+
+    const unique = readBoolean(rawIndex.unique, false, 'unique')
+    if (unique && fieldIds.length < 2) {
+      throw new Error(`A restrição UNIQUE "${rawIndex.name}" da tabela "${tableName}" precisa ter ao menos dois campos.`)
+    }
+    const definitionFieldIds = unique ? [...fieldIds].sort() : fieldIds
+    const definition = `${unique ? 'unique' : 'index'}:${definitionFieldIds.join(':')}`
+    if (indexDefinitions.has(definition)) {
+      throw new Error(`A definição do índice "${rawIndex.name}" está duplicada em "${tableName}".`)
+    }
+    indexDefinitions.add(definition)
+
+    return {
+      id,
+      name: rawIndex.name.trim(),
+      fieldIds,
+      unique,
+    }
+  })
+}
+
 export function normalizeModel(rawModel) {
   if (!rawModel || typeof rawModel !== 'object' || Array.isArray(rawModel)) {
     throw new Error('O arquivo não contém um modelo válido.')
@@ -202,6 +277,7 @@ export function normalizeModel(rawModel) {
         foreignKey,
       }
     })
+    const indexes = normalizeIndexes(rawTable.indexes, fields, rawTable.name)
 
     return {
       id,
@@ -210,12 +286,23 @@ export function normalizeModel(rawModel) {
       collapsed: readBoolean(rawTable.collapsed, false, 'collapsed'),
       comment: readOptionalText(rawTable.comment, 'comment'),
       notes: readOptionalText(rawTable.notes, 'notes'),
+      indexes,
       position: {
         x: Number.isFinite(rawTable.position?.x) ? rawTable.position.x : 76 + tableIndex * 44,
         y: Number.isFinite(rawTable.position?.y) ? rawTable.position.y : 82 + tableIndex * 38,
       },
       fields,
     }
+  })
+
+  const indexNames = new Set()
+  tables.forEach((table) => {
+    table.indexes.forEach((index) => {
+      if (indexNames.has(index.name)) {
+        throw new Error(`O nome do índice "${index.name}" está duplicado no modelo.`)
+      }
+      indexNames.add(index.name)
+    })
   })
 
   if (rawModel.relationships !== undefined && !Array.isArray(rawModel.relationships)) {

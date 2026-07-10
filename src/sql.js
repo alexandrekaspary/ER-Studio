@@ -98,6 +98,23 @@ function foreignKeyStatements(tables) {
   }))
 }
 
+function indexStatements(tables) {
+  return tables.flatMap((table) => {
+    const fieldsById = new Map((table.fields || []).map((field) => [field.id, field]))
+
+    return (table.indexes || []).flatMap((index) => {
+      const fields = (index.fieldIds || []).map((fieldId) => fieldsById.get(fieldId))
+      if (fields.length === 0 || fields.some((field) => !field)) return []
+
+      const columns = fields.map((field) => quoteIdentifier(field.name)).join(', ')
+      if (index.unique) {
+        return [`ALTER TABLE ${quoteIdentifier(table.name)}\n  ADD CONSTRAINT ${quoteIdentifier(index.name)}\n  UNIQUE (${columns});`]
+      }
+      return [`CREATE INDEX ${quoteIdentifier(index.name)} ON ${quoteIdentifier(table.name)} (${columns});`]
+    })
+  })
+}
+
 function commentStatements(tables) {
   return tables.flatMap((table) => {
     const statements = []
@@ -136,6 +153,9 @@ export function generatePostgresSql(model) {
 
   const foreignKeys = foreignKeyStatements(tables)
   if (foreignKeys.length > 0) blocks.push(foreignKeys.join('\n\n'))
+
+  const indexes = indexStatements(tables)
+  if (indexes.length > 0) blocks.push(indexes.join('\n\n'))
 
   const comments = commentStatements(tables)
   if (comments.length > 0) blocks.push(comments.join('\n'))

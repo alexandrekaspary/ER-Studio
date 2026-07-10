@@ -1,14 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   FOREIGN_KEY_ACTIONS,
   TABLE_COLORS,
   clone,
   createExportPayload,
   emptyField,
+  emptyIndex,
   getRelations,
   makeId,
   normalizeModel,
 } from './model'
+import { createModelHistory, modelHistoryReducer } from './history'
 import { generatePostgresSql } from './sql'
 
 const STORAGE_KEY = 'er-studio:model:v1'
@@ -73,6 +75,7 @@ const INITIAL_MODEL = {
       collapsed: false,
       comment: 'Cadastro principal de clientes.',
       notes: 'Dados de contato usados pelo processo comercial.',
+      indexes: [],
       position: { x: 84, y: 106 },
       fields: [
         {
@@ -126,6 +129,12 @@ const INITIAL_MODEL = {
       collapsed: false,
       comment: 'Pedidos realizados pelos clientes.',
       notes: '',
+      indexes: [{
+        id: 'index_orders_client_created',
+        name: 'idx_pedidos_cliente_criado_em',
+        fieldIds: ['field_orders_client_id', 'field_orders_created_at'],
+        unique: false,
+      }],
       position: { x: 478, y: 220 },
       fields: [
         {
@@ -238,6 +247,13 @@ async function copyTextToClipboard(text) {
   const copied = document.execCommand('copy')
   textarea.remove()
   if (!copied) throw new Error('Não foi possível copiar o SQL.')
+}
+
+function isEditableTarget(target) {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || (target instanceof HTMLElement && target.isContentEditable)
 }
 
 function findFieldIndex(table, fieldId) {
@@ -402,6 +418,147 @@ function ColorSwatches({ value, onChange }) {
           key={color}
         />
       ))}
+    </div>
+  )
+}
+
+function indexNameToken(value) {
+  return String(value || 'campos')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase() || 'campos'
+}
+
+function suggestedIndexName(table, fieldIds, unique) {
+  const fields = fieldIds
+    .map((fieldId) => table.fields.find((field) => field.id === fieldId))
+    .filter(Boolean)
+    .map((field) => indexNameToken(field.name))
+  const prefix = unique ? 'uq' : 'idx'
+  const base = `${prefix}_${indexNameToken(table.name)}_${fields.join('_') || 'campos'}`
+  return base.slice(0, 63)
+}
+
+function IndexDialog({ table, index, initialUnique = false, onClose, onSave }) {
+  const [fieldIds, setFieldIds] = useState(() => index?.fieldIds || [])
+  const [unique, setUnique] = useState(Boolean(index?.unique ?? initialUnique))
+  const [name, setName] = useState(() => index?.name || suggestedIndexName(table, index?.fieldIds || [], Boolean(index?.unique ?? initialUnique)))
+  const [isNameCustomized, setIsNameCustomized] = useState(Boolean(index?.name))
+  const minimumFields = unique ? 2 : 1
+
+  useEffect(() => {
+    if (!isNameCustomized) {
+      setName(suggestedIndexName(table, fieldIds, unique))
+    }
+  }, [fieldIds, isNameCustomized, table, unique])
+
+  function toggleField(fieldId) {
+    setFieldIds((current) => {
+      const next = current.includes(fieldId)
+        ? current.filter((id) => id !== fieldId)
+        : [...current, fieldId]
+      return next.sort((left, right) => table.fields.findIndex((field) => field.id === left) - table.fields.findIndex((field) => field.id === right))
+    })
+  }
+
+  function moveField(fieldId, direction) {
+    setFieldIds((current) => {
+      const position = current.indexOf(fieldId)
+      const nextPosition = position + direction
+      if (position < 0 || nextPosition < 0 || nextPosition >= current.length) return current
+      const next = [...current]
+      ;[next[position], next[nextPosition]] = [next[nextPosition], next[position]]
+      return next
+    })
+  }
+
+  function submit(event) {
+    event.preventDefault()
+    if (fieldIds.length < minimumFields) return
+    onSave({
+      ...(index || emptyIndex()),
+      name: name.trim() || suggestedIndexName(table, fieldIds, unique),
+      fieldIds,
+      unique,
+    })
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <form className="modal-card index-dialog-card" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">{index ? 'EDITAR DEFINIÇÃO' : 'NOVA DEFINIÇÃO'}</p>
+            <h2>{unique ? 'Restrição UNIQUE' : 'Índice'}</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
+        </div>
+
+        <label className="form-label">
+          Nome
+          <input
+            value={name}
+            maxLength="63"
+            onChange={(event) => {
+              setName(event.target.value)
+              setIsNameCustomized(true)
+            }}
+            placeholder={suggestedIndexName(table, fieldIds, unique)}
+          />
+        </label>
+
+        <label className="toggle-row index-unique-toggle">
+          <span>
+            <strong>Restrição UNIQUE composta</strong>
+            <small>Exige uma combinação de valores sem repetição.</small>
+          </span>
+          <input type="checkbox" checked={unique} onChange={(event) => setUnique(event.target.checked)} />
+        </label>
+
+        <fieldset className="index-fields">
+          <legend>Campos e ordem</legend>
+          <p>Marque os campos que formarão a definição. A ordem é usada no SQL.</p>
+          <div className="index-field-options">
+            {table.fields.map((field) => (
+              <label className="index-field-option" key={field.id}>
+                <input type="checkbox" checked={fieldIds.includes(field.id)} onChange={() => toggleField(field.id)} />
+                <span>
+                  <strong>{field.name}</strong>
+                  <small>{fieldDescription(field)}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          {fieldIds.length > 0 && (
+            <div className="selected-index-fields">
+              <span>Ordem selecionada</span>
+              {fieldIds.map((fieldId, position) => {
+                const field = table.fields.find((candidate) => candidate.id === fieldId)
+                if (!field) return null
+                return (
+                  <div className="selected-index-field" key={fieldId}>
+                    <span className="index-field-position">{position + 1}</span>
+                    <span>{field.name}</span>
+                    <span className="index-order-actions">
+                      <button type="button" onClick={() => moveField(fieldId, -1)} disabled={position === 0} aria-label={`Mover ${field.name} para cima`} title="Mover para cima">↑</button>
+                      <button type="button" onClick={() => moveField(fieldId, 1)} disabled={position === fieldIds.length - 1} aria-label={`Mover ${field.name} para baixo`} title="Mover para baixo">↓</button>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </fieldset>
+
+        {unique && fieldIds.length < 2 && <p className="index-validation">Uma restrição UNIQUE composta precisa de pelo menos dois campos.</p>}
+
+        <div className="modal-actions">
+          <button type="button" className="button secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="button primary" disabled={fieldIds.length < minimumFields}>{index ? 'Salvar definição' : 'Adicionar definição'}</button>
+        </div>
+      </form>
     </div>
   )
 }
@@ -605,7 +762,12 @@ function TableCard({ table, selected, selectedFieldId, onSelect, onSelectField, 
 }
 
 function App() {
-  const [model, setModel] = useState(loadInitialModel)
+  const [history, dispatchHistory] = useReducer(
+    modelHistoryReducer,
+    undefined,
+    () => createModelHistory(loadInitialModel()),
+  )
+  const model = history.present
   const [selectedTableId, setSelectedTableId] = useState(null)
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [isAddTableOpen, setIsAddTableOpen] = useState(false)
@@ -613,6 +775,7 @@ function App() {
   const [notice, setNotice] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
   const [isSqlDialogOpen, setIsSqlDialogOpen] = useState(false)
+  const [indexDialog, setIndexDialog] = useState(null)
   const [zoom, setZoom] = useState(1)
   const [isStorageNoticeOpen, setIsStorageNoticeOpen] = useState(shouldShowStorageNotice)
   const [isSchemaSidebarVisible, setIsSchemaSidebarVisible] = useState(true)
@@ -635,6 +798,8 @@ function App() {
   const relations = useMemo(() => getRelations(model), [model])
   const canvasSize = useMemo(() => getCanvasSize(model.tables), [model.tables])
   const postgresSql = useMemo(() => generatePostgresSql(model), [model])
+  const canUndo = !history.transaction && history.past.length > 0
+  const canRedo = !history.transaction && history.future.length > 0
 
   useLayoutEffect(() => {
     const scrollContainer = diagramScrollRef.current
@@ -656,9 +821,26 @@ function App() {
 
   useEffect(() => {
     function keyboardShortcut(event) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      const modifier = event.ctrlKey || event.metaKey
+      if (!modifier) return
+
+      const key = event.key.toLowerCase()
+      if (key === 's') {
         event.preventDefault()
         exportModel()
+        return
+      }
+      if (isEditableTarget(event.target)) return
+
+      if (key === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redoModel()
+        else undoModel()
+        return
+      }
+      if (key === 'y') {
+        event.preventDefault()
+        redoModel()
       }
     }
     window.addEventListener('keydown', keyboardShortcut)
@@ -667,6 +849,34 @@ function App() {
 
   function showNotice(type, message) {
     setNotice({ type, message })
+  }
+
+  function setModel(update) {
+    dispatchHistory({ type: 'commit', update })
+  }
+
+  function beginModelTransaction() {
+    dispatchHistory({ type: 'begin-transaction' })
+  }
+
+  function previewModelTransaction(update) {
+    dispatchHistory({ type: 'preview-transaction', update })
+  }
+
+  function finishModelTransaction() {
+    dispatchHistory({ type: 'finish-transaction' })
+  }
+
+  function cancelModelTransaction() {
+    dispatchHistory({ type: 'cancel-transaction' })
+  }
+
+  function undoModel() {
+    dispatchHistory({ type: 'undo' })
+  }
+
+  function redoModel() {
+    dispatchHistory({ type: 'redo' })
   }
 
   function requestConfirmation(action) {
@@ -681,17 +891,34 @@ function App() {
     if (action.kind === 'delete-field') {
       setModel((current) => ({
         ...current,
-        tables: current.tables.map((table) => ({
-          ...table,
-          fields: table.id === action.tableId
-            ? table.fields.filter((field) => field.id !== action.fieldId)
-            : table.fields.map((field) => field.foreignKey?.tableId === action.tableId && field.foreignKey?.fieldId === action.fieldId
-              ? { ...field, isForeignKey: false, foreignKey: null }
-              : field),
-        })),
+        tables: current.tables.map((table) => {
+          const ownsDeletedField = table.id === action.tableId
+          return {
+            ...table,
+            indexes: ownsDeletedField
+              ? (table.indexes || []).filter((index) => !index.fieldIds.includes(action.fieldId))
+              : table.indexes,
+            fields: ownsDeletedField
+              ? table.fields.filter((field) => field.id !== action.fieldId)
+              : table.fields.map((field) => field.foreignKey?.tableId === action.tableId && field.foreignKey?.fieldId === action.fieldId
+                ? { ...field, isForeignKey: false, foreignKey: null }
+                : field),
+          }
+        }),
       }))
       setSelectedFieldId(null)
-      showNotice('success', 'Campo excluído.')
+      showNotice('success', 'Campo excluído e índices dependentes atualizados.')
+      return
+    }
+
+    if (action.kind === 'delete-index') {
+      setModel((current) => ({
+        ...current,
+        tables: current.tables.map((table) => table.id === action.tableId
+          ? { ...table, indexes: (table.indexes || []).filter((index) => index.id !== action.indexId) }
+          : table),
+      }))
+      showNotice('success', 'Índice removido.')
       return
     }
 
@@ -790,6 +1017,7 @@ function App() {
       collapsed: false,
       comment: '',
       notes: '',
+      indexes: [],
       position: { x: 72 + (offset % 360), y: 72 + (offset % 260) },
       fields: [
         {
@@ -819,6 +1047,54 @@ function App() {
         : table),
     }))
     setSelectedFieldId(field.id)
+  }
+
+  function openIndexDialog(index = null, initialUnique = false) {
+    if (!selectedTable) return
+    setIndexDialog({ tableId: selectedTable.id, indexId: index?.id || null, initialUnique: index?.unique ?? initialUnique })
+  }
+
+  function saveIndex(index) {
+    if (!indexDialog) return
+    const tableId = indexDialog.tableId
+    const currentIndexId = indexDialog.indexId
+    const duplicateName = model.tables.some((table) => (table.indexes || []).some((candidate) => (
+      candidate.name === index.name && !(table.id === tableId && candidate.id === currentIndexId)
+    )))
+
+    if (duplicateName) {
+      showNotice('error', `Já existe um índice chamado "${index.name}" neste modelo.`)
+      return
+    }
+
+    setModel((current) => ({
+      ...current,
+      tables: current.tables.map((table) => {
+        if (table.id !== tableId) return table
+        const indexes = table.indexes || []
+        return {
+          ...table,
+          indexes: currentIndexId
+            ? indexes.map((candidate) => candidate.id === currentIndexId ? index : candidate)
+            : [...indexes, index],
+        }
+      }),
+    }))
+    setIndexDialog(null)
+    showNotice('success', currentIndexId ? 'Índice atualizado.' : 'Índice adicionado.')
+  }
+
+  function deleteIndex(index) {
+    if (!selectedTable) return
+    requestConfirmation({
+      kind: 'delete-index',
+      tableId: selectedTable.id,
+      indexId: index.id,
+      title: 'Excluir índice?',
+      message: `A definição "${index.name}" será removida desta tabela.`,
+      confirmLabel: 'Excluir índice',
+      variant: 'danger',
+    })
   }
 
   function toggleTableCollapse(tableId) {
@@ -870,23 +1146,43 @@ function App() {
       startY: event.clientY,
       tableX: table.position.x,
       tableY: table.position.y,
+      lastX: table.position.x,
+      lastY: table.position.y,
       zoom,
     }
+    beginModelTransaction()
     selectTable(table.id)
+  }
+
+  function updateDragPosition(drag, event) {
+    const x = Math.max(16, Math.round(drag.tableX + (event.clientX - drag.startX) / drag.zoom))
+    const y = Math.max(16, Math.round(drag.tableY + (event.clientY - drag.startY) / drag.zoom))
+    if (x === drag.lastX && y === drag.lastY) return
+    drag.lastX = x
+    drag.lastY = y
+    previewModelTransaction((current) => ({
+      ...current,
+      tables: current.tables.map((table) => table.id === drag.tableId
+        ? { ...table, position: { x, y } }
+        : table),
+    }))
   }
 
   function moveDrag(event) {
     const drag = draggingRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
-    const x = Math.max(16, Math.round(drag.tableX + (event.clientX - drag.startX) / drag.zoom))
-    const y = Math.max(16, Math.round(drag.tableY + (event.clientY - drag.startY) / drag.zoom))
-    patchTable(drag.tableId, { position: { x, y } })
+    updateDragPosition(drag, event)
   }
 
   function endDrag(event) {
-    if (draggingRef.current?.pointerId === event.pointerId) {
-      draggingRef.current = null
+    const drag = draggingRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    if (event.type === 'pointercancel') cancelModelTransaction()
+    else {
+      updateDragPosition(drag, event)
+      finishModelTransaction()
     }
+    draggingRef.current = null
   }
 
   function toggleForeignKey(checked) {
@@ -1003,6 +1299,12 @@ function App() {
   const foreignTargetTable = selectedField?.foreignKey?.tableId
     ? model.tables.find((table) => table.id === selectedField.foreignKey.tableId)
     : null
+  const indexDialogTable = indexDialog
+    ? model.tables.find((table) => table.id === indexDialog.tableId)
+    : null
+  const editedIndex = indexDialogTable && indexDialog?.indexId
+    ? indexDialogTable.indexes?.find((index) => index.id === indexDialog.indexId) || null
+    : null
 
   return (
     <main className="app-shell">
@@ -1100,6 +1402,10 @@ function App() {
               <div className="canvas-summary">
                 <p className="eyebrow">DIAGRAMA ER</p>
                 <span>{model.tables.length} tabelas · {relations.length} relações</span>
+              </div>
+              <div className="history-controls" role="group" aria-label="Histórico de alterações">
+                <button type="button" className="history-button" onClick={undoModel} disabled={!canUndo} aria-label="Desfazer alteração" title="Desfazer (Ctrl / ⌘ + Z)">↶</button>
+                <button type="button" className="history-button" onClick={redoModel} disabled={!canRedo} aria-label="Refazer alteração" title="Refazer (Ctrl / ⌘ + Shift + Z)">↷</button>
               </div>
             </div>
             <div className="canvas-toolbar-actions">
@@ -1332,6 +1638,43 @@ function App() {
                     </div>
                   </section>
 
+                  <section className="form-section indexes-section">
+                    <div className="section-heading">
+                      <div>
+                        <span className="section-title">Índices e restrições</span>
+                        <span className="section-description">UNIQUE de um campo é definido no próprio campo; aqui você combina colunas.</span>
+                      </div>
+                      <div className="index-section-actions">
+                        <button type="button" className="small-button" onClick={() => openIndexDialog()} disabled={selectedTable.fields.length === 0}>+ Índice</button>
+                        <button type="button" className="small-button" onClick={() => openIndexDialog(null, true)} disabled={selectedTable.fields.length < 2}>+ UNIQUE</button>
+                      </div>
+                    </div>
+                    {(selectedTable.indexes || []).length === 0 ? (
+                      <p className="small-empty index-empty">Nenhum índice adicional nesta tabela.</p>
+                    ) : (
+                      <div className="index-list">
+                        {selectedTable.indexes.map((index) => {
+                          const fieldNames = index.fieldIds
+                            .map((fieldId) => selectedTable.fields.find((field) => field.id === fieldId)?.name)
+                            .filter(Boolean)
+                          return (
+                            <div className="index-item" key={index.id}>
+                              <div className="index-item-content">
+                                <span className={`index-kind${index.unique ? ' is-unique' : ''}`}>{index.unique ? 'UNIQUE' : 'ÍNDICE'}</span>
+                                <strong>{index.name}</strong>
+                                <small>{fieldNames.join(' · ')}</small>
+                              </div>
+                              <div className="index-item-actions">
+                                <button type="button" onClick={() => openIndexDialog(index)}>Editar</button>
+                                <button type="button" onClick={() => deleteIndex(index)}>Excluir</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
+
                   <section className="form-section danger-section">
                     <button type="button" className="danger-button" onClick={deleteTable}>Excluir tabela</button>
                     <p>As chaves estrangeiras que apontam para esta tabela serão removidas.</p>
@@ -1487,7 +1830,7 @@ function App() {
 
       <footer className="statusbar">
         <span><i className="status-dot" /> Rascunho salvo localmente</span>
-        <span>Ctrl / ⌘ + S para exportar JSON</span>
+        <span>Ctrl / ⌘ + Z desfaz · Ctrl / ⌘ + S exporta JSON</span>
       </footer>
 
       {notice && (
@@ -1502,6 +1845,7 @@ function App() {
       {importPreview && <ImportDialog preview={importPreview} onClose={() => setImportPreview(null)} onConfirm={confirmImport} />}
       {pendingAction && <ConfirmDialog action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmPendingAction} />}
       {isSqlDialogOpen && <SqlDialog sql={postgresSql} onClose={() => setIsSqlDialogOpen(false)} onCopy={copyPostgresSql} onDownload={downloadPostgresSql} />}
+      {indexDialogTable && <IndexDialog table={indexDialogTable} index={editedIndex} initialUnique={Boolean(indexDialog?.initialUnique)} onClose={() => setIndexDialog(null)} onSave={saveIndex} />}
       {isStorageNoticeOpen && <StorageNoticeDialog onConfirm={dismissStorageNotice} />}
     </main>
   )
