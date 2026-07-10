@@ -48,7 +48,7 @@ O Vite exibirá a URL local no terminal, normalmente `http://localhost:5173`.
 
 1. Clique em **Nova tabela** e informe nome e cor.
 2. Selecione a tabela criada para adicionar ou editar campos.
-3. Em cada campo, defina tipo, tamanho, valor padrão, nulidade, chave primária, **Valor único** e uma expressão de **Restrição (CHECK)** quando necessário.
+3. Em cada campo, defina tipo, tamanho quando o tipo aceitar esse modificador, valor padrão, nulidade, chave primária, **Valor único** e uma expressão de **Restrição (CHECK)** quando necessário. O editor oculta **Tamanho** em tipos que não o aceitam.
 4. Marque **Chave estrangeira**, escolha a tabela e o campo referenciados e defina as ações `ON DELETE` e `ON UPDATE`. A relação aparece automaticamente no diagrama.
 5. Use **Comentário** para documentar a tabela ou o campo no PostgreSQL. Use **Observações** para decisões e lembretes mantidos no modelo.
 6. Na propriedade da tabela, crie índices comuns ou uma restrição **UNIQUE composta**. A ordem dos campos é preservada no SQL.
@@ -161,7 +161,7 @@ Exemplo reduzido:
 ### Regras de validação
 
 - A versão suportada é `1`.
-- Toda tabela e todo campo precisam de nome; IDs duplicados são recusados.
+- Toda tabela e todo campo precisam de nome. Nomes de tabelas duplicados e nomes de campos duplicados na mesma tabela são recusados sem diferenciar maiúsculas/minúsculas; IDs duplicados também são recusados.
 - `unique`, quando informado, precisa ser booleano.
 - `checkConstraint`, quando informado, precisa ser um texto com a expressão `CHECK` sem a palavra `CHECK`; campos ausentes em JSONs antigos são normalizados como texto vazio.
 - `notes` e `comment`, quando informados, precisam ser textos. Campos ausentes em JSONs antigos são normalizados como texto vazio.

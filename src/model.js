@@ -11,6 +11,28 @@ export const TABLE_COLORS = [
 
 export const FOREIGN_KEY_ACTIONS = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT']
 
+export const POSTGRES_TYPES_WITH_SIZE = new Set([
+  'BIT',
+  'BIT VARYING',
+  'CHAR',
+  'CHARACTER',
+  'CHARACTER VARYING',
+  'DECIMAL',
+  'FLOAT',
+  'INTERVAL',
+  'NUMERIC',
+  'TIME',
+  'TIME WITH TIME ZONE',
+  'TIMESTAMP',
+  'TIMESTAMP WITH TIME ZONE',
+  'VARCHAR',
+])
+
+export function typeSupportsSize(type) {
+  const normalized = String(type || '').trim().replace(/\s+/g, ' ').toUpperCase()
+  return POSTGRES_TYPES_WITH_SIZE.has(normalized)
+}
+
 export function makeId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -110,6 +132,10 @@ function readReferenceId(value, label) {
     throw new Error(`A relação precisa informar ${label}.`)
   }
   return value.trim()
+}
+
+function normalizedNameKey(value) {
+  return value.trim().toLocaleLowerCase('pt-BR')
 }
 
 function normalizeForeignKey(rawForeignKey, tableName, fieldName) {
@@ -228,6 +254,7 @@ export function normalizeModel(rawModel) {
   }
 
   const tableIds = new Set()
+  const tableNames = new Set()
   const tables = rawModel.tables.map((rawTable, tableIndex) => {
     if (!rawTable || typeof rawTable !== 'object' || Array.isArray(rawTable)) {
       throw new Error(`A tabela na posição ${tableIndex + 1} é inválida.`)
@@ -239,6 +266,13 @@ export function normalizeModel(rawModel) {
       throw new Error(`A tabela "${rawTable.name}" não possui uma lista de campos.`)
     }
 
+    const tableName = rawTable.name.trim()
+    const tableNameKey = normalizedNameKey(tableName)
+    if (tableNames.has(tableNameKey)) {
+      throw new Error(`O nome da tabela "${tableName}" está duplicado.`)
+    }
+    tableNames.add(tableNameKey)
+
     const id = readId(rawTable.id, 'table', `tabela "${rawTable.name}"`)
     if (tableIds.has(id)) {
       throw new Error(`O identificador da tabela "${id}" está duplicado.`)
@@ -246,6 +280,7 @@ export function normalizeModel(rawModel) {
     tableIds.add(id)
 
     const fieldIds = new Set()
+    const fieldNames = new Set()
     const fields = rawTable.fields.map((rawField, fieldIndex) => {
       if (!rawField || typeof rawField !== 'object' || Array.isArray(rawField)) {
         throw new Error(`Um campo de "${rawTable.name}" é inválido.`)
@@ -253,6 +288,13 @@ export function normalizeModel(rawModel) {
       if (typeof rawField.name !== 'string' || !rawField.name.trim()) {
         throw new Error(`Um campo de "${rawTable.name}" não tem nome.`)
       }
+
+      const fieldName = rawField.name.trim()
+      const fieldNameKey = normalizedNameKey(fieldName)
+      if (fieldNames.has(fieldNameKey)) {
+        throw new Error(`O nome do campo "${fieldName}" está duplicado em "${tableName}".`)
+      }
+      fieldNames.add(fieldNameKey)
 
       const fieldId = readId(rawField.id, 'field', `campo "${rawField.name}"`)
       if (fieldIds.has(fieldId)) {
@@ -265,7 +307,7 @@ export function normalizeModel(rawModel) {
 
       return {
         id: fieldId,
-        name: rawField.name.trim(),
+        name: fieldName,
         type: typeof rawField.type === 'string' && rawField.type.trim() ? rawField.type.trim().toUpperCase() : 'VARCHAR',
         size: rawField.size == null ? '' : String(rawField.size),
         defaultValue: rawField.defaultValue == null ? '' : String(rawField.defaultValue),
@@ -283,7 +325,7 @@ export function normalizeModel(rawModel) {
 
     return {
       id,
-      name: rawTable.name.trim(),
+      name: tableName,
       color: typeof rawTable.color === 'string' && rawTable.color.trim() ? rawTable.color : TABLE_COLORS[tableIndex % TABLE_COLORS.length],
       collapsed: readBoolean(rawTable.collapsed, false, 'collapsed'),
       comment: readOptionalText(rawTable.comment, 'comment'),

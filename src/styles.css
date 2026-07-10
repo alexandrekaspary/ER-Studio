@@ -1188,6 +1188,10 @@ h2 {
   gap: 10px;
 }
 
+.form-grid.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .form-grid > .form-label {
   grid-template-rows: 13px 30px;
   align-content: start;

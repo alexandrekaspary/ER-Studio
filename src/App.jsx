@@ -9,6 +9,7 @@ import {
   getRelations,
   makeId,
   normalizeModel,
+  typeSupportsSize,
 } from './model'
 import { createModelHistory, modelHistoryReducer } from './history'
 import { generatePostgresSql } from './sql'
@@ -213,7 +214,11 @@ function shouldShowStorageNotice() {
 }
 
 function fieldDescription(field) {
-  return field.size ? `${field.type}(${field.size})` : field.type
+  return typeSupportsSize(field.type) && field.size ? `${field.type}(${field.size})` : field.type
+}
+
+function normalizedNameKey(value) {
+  return value.trim().toLocaleLowerCase('pt-BR')
 }
 
 function fileStem(name) {
@@ -1001,6 +1006,43 @@ function App() {
     }))
   }
 
+  function hasDuplicateTableName(tableId, value) {
+    const nameKey = normalizedNameKey(value)
+    return Boolean(nameKey) && model.tables.some((table) => (
+      table.id !== tableId && normalizedNameKey(table.name) === nameKey
+    ))
+  }
+
+  function updateTableName(tableId, value) {
+    if (hasDuplicateTableName(tableId, value)) {
+      showNotice('error', 'Já existe uma tabela com este nome.')
+      return
+    }
+    patchTable(tableId, { name: value })
+  }
+
+  function updateFieldName(tableId, fieldId, value) {
+    const table = model.tables.find((item) => item.id === tableId)
+    const nameKey = normalizedNameKey(value)
+    const isDuplicate = Boolean(nameKey) && table?.fields.some((field) => (
+      field.id !== fieldId && normalizedNameKey(field.name) === nameKey
+    ))
+    if (isDuplicate) {
+      showNotice('error', 'Já existe um campo com este nome nesta tabela.')
+      return
+    }
+    patchField(tableId, fieldId, { name: value })
+  }
+
+  function validateCurrentModel() {
+    try {
+      return normalizeModel(model)
+    } catch (error) {
+      showNotice('error', error instanceof Error ? error.message : 'O modelo possui dados inválidos.')
+      return null
+    }
+  }
+
   function selectTable(tableId) {
     setSelectedTableId(tableId)
     setSelectedFieldId(null)
@@ -1014,6 +1056,10 @@ function App() {
   }
 
   function createTable({ name, color }) {
+    if (hasDuplicateTableName(null, name)) {
+      showNotice('error', 'Já existe uma tabela com este nome.')
+      return
+    }
     const tableId = makeId('table')
     const offset = model.tables.length * 34
     const table = {
@@ -1247,9 +1293,16 @@ function App() {
   }
 
   function exportModel() {
-    const payload = createExportPayload(model)
-    downloadTextFile(JSON.stringify(payload, null, 2), `${fileStem(model.name)}.json`, 'application/json')
+    const validModel = validateCurrentModel()
+    if (!validModel) return
+    const payload = createExportPayload(validModel)
+    downloadTextFile(JSON.stringify(payload, null, 2), `${fileStem(validModel.name)}.json`, 'application/json')
     showNotice('success', 'JSON exportado com o diagrama e as relações.')
+  }
+
+  function openSqlDialog() {
+    if (!validateCurrentModel()) return
+    setIsSqlDialogOpen(true)
   }
 
   function downloadPostgresSql() {
@@ -1305,6 +1358,7 @@ function App() {
   const foreignTargetTable = selectedField?.foreignKey?.tableId
     ? model.tables.find((table) => table.id === selectedField.foreignKey.tableId)
     : null
+  const selectedTypeSupportsSize = selectedField ? typeSupportsSize(selectedField.type) : false
   const indexDialogTable = indexDialog
     ? model.tables.find((table) => table.id === indexDialog.tableId)
     : null
@@ -1334,7 +1388,7 @@ function App() {
           <button type="button" className="button secondary" onClick={createNewModel}>Novo</button>
           <button type="button" className="button secondary" onClick={() => importInputRef.current?.click()}>Importar JSON</button>
           <button type="button" className="button primary" onClick={exportModel}>Exportar JSON</button>
-          <button type="button" className="button secondary" onClick={() => setIsSqlDialogOpen(true)}>Gerar SQL</button>
+          <button type="button" className="button secondary" onClick={openSqlDialog}>Gerar SQL</button>
           <input ref={importInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={readImportFile} />
         </div>
       </header>
@@ -1587,7 +1641,7 @@ function App() {
                   <section className="form-section">
                     <label className="form-label">
                       Nome da tabela
-                      <input value={selectedTable.name} onChange={(event) => patchTable(selectedTable.id, { name: event.target.value })} />
+                      <input value={selectedTable.name} onChange={(event) => updateTableName(selectedTable.id, event.target.value)} />
                     </label>
                     <label className="form-label">
                       Cor
@@ -1691,9 +1745,9 @@ function App() {
                   <section className="form-section field-editor">
                     <label className="form-label">
                       Nome do campo
-                      <input value={selectedField.name} onChange={(event) => patchField(selectedTable.id, selectedField.id, { name: event.target.value })} />
+                      <input value={selectedField.name} onChange={(event) => updateFieldName(selectedTable.id, selectedField.id, event.target.value)} />
                     </label>
-                    <div className="form-grid">
+                    <div className={`form-grid${selectedTypeSupportsSize ? '' : ' is-single'}`}>
                       <label className="form-label">
                         Tipo
                         <select value={selectedField.type} onChange={(event) => patchField(selectedTable.id, selectedField.id, { type: event.target.value })}>
@@ -1705,10 +1759,12 @@ function App() {
                           ))}
                         </select>
                       </label>
-                      <label className="form-label">
-                        Tamanho
-                        <input value={selectedField.size} onChange={(event) => patchField(selectedTable.id, selectedField.id, { size: event.target.value })} placeholder="255" />
-                      </label>
+                      {selectedTypeSupportsSize && (
+                        <label className="form-label">
+                          Tamanho
+                          <input value={selectedField.size} onChange={(event) => patchField(selectedTable.id, selectedField.id, { size: event.target.value })} placeholder="255" />
+                        </label>
+                      )}
                     </div>
                     <label className="form-label default-value-label">
                       Valor padrão

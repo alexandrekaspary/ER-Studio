@@ -210,6 +210,10 @@ test('rejeita versões, relações e FKs inválidas', () => {
   longIndexName.tables[1].indexes[0].name = 'x'.repeat(64)
   const invalidCheckConstraint = createModelFixture()
   invalidCheckConstraint.tables[0].fields[0].checkConstraint = ['id > 0']
+  const duplicateTableName = createModelFixture()
+  duplicateTableName.tables[1].name = ' CLIENTES '
+  const duplicateFieldName = createModelFixture()
+  duplicateFieldName.tables[1].fields[1].name = ' ID '
 
   assert.throws(() => normalizeModel(missingTables), /lista de tabelas/)
   assert.throws(() => normalizeModel(unsupportedVersion), /não é compatível/)
@@ -222,4 +226,6 @@ test('rejeita versões, relações e FKs inválidas', () => {
   assert.throws(() => normalizeModel(incompleteCompositeUnique), /UNIQUE .*ao menos dois campos/)
   assert.throws(() => normalizeModel(longIndexName), /63 caracteres/)
   assert.throws(() => normalizeModel(invalidCheckConstraint), /"checkConstraint"/)
+  assert.throws(() => normalizeModel(duplicateTableName), /nome da tabela .*duplicado/)
+  assert.throws(() => normalizeModel(duplicateFieldName), /nome do campo .*duplicado/)
 })

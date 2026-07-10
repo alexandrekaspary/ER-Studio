@@ -1,3 +1,5 @@
+import { typeSupportsSize } from './model.js'
+
 const FOREIGN_KEY_ACTIONS = new Set(['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'])
 
 function quoteIdentifier(value) {
@@ -19,7 +21,7 @@ function formatDataType(field) {
   const size = String(field.size ?? '').trim()
   const isSafeSize = /^\d+(?:\s*,\s*\d+)?$/.test(size)
 
-  if (!size || !isSafeSize || type.includes('(')) return type
+  if (!size || !isSafeSize || !typeSupportsSize(type) || type.includes('(')) return type
   return `${type}(${size})`
 }
 

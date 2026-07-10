@@ -142,3 +142,27 @@ test('protege identificadores e normaliza valores inválidos sem quebrar o scrip
   assert.match(sql, /"código""externo" VARCHAR/)
   assert.doesNotMatch(sql, /DROP TABLE/)
 })
+
+test('aplica tamanho apenas a tipos PostgreSQL compatíveis', () => {
+  const sql = generatePostgresSql({
+    tables: [{
+      id: 'types',
+      name: 'tipos',
+      indexes: [],
+      fields: [
+        { id: 'uuid', name: 'identificador', type: 'UUID', size: '10', nullable: true },
+        { id: 'integer', name: 'quantidade', type: 'INTEGER', size: '10', nullable: true },
+        { id: 'text', name: 'descricao', type: 'TEXT', size: '255', nullable: true },
+        { id: 'varchar', name: 'titulo', type: 'VARCHAR', size: '255', nullable: true },
+        { id: 'numeric', name: 'valor', type: 'NUMERIC', size: '12, 2', nullable: true },
+      ],
+    }],
+  })
+
+  assert.match(sql, /"identificador" UUID/)
+  assert.match(sql, /"quantidade" INTEGER/)
+  assert.match(sql, /"descricao" TEXT/)
+  assert.doesNotMatch(sql, /UUID\(10\)|INTEGER\(10\)|TEXT\(255\)/)
+  assert.match(sql, /"titulo" VARCHAR\(255\)/)
+  assert.match(sql, /"valor" NUMERIC\(12, 2\)/)
+})
