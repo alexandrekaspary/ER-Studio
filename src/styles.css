@@ -1476,6 +1476,16 @@ h2 {
   gap: 6px;
 }
 
+.statusbar-link {
+  color: #6e8194;
+  text-decoration: none;
+}
+
+.statusbar-link:hover {
+  color: #34506b;
+  text-decoration: underline;
+}
+
 .status-dot {
   width: 6px;
   height: 6px;
@@ -2001,7 +2011,7 @@ h2 {
     padding: 0 13px;
   }
 
-  .statusbar span:last-child {
+  .statusbar-shortcuts {
     display: none;
   }
 }

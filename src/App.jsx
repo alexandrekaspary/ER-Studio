@@ -1897,7 +1897,10 @@ function App() {
 
       <footer className="statusbar">
         <span><i className="status-dot" /> Rascunho salvo localmente</span>
-        <span>Ctrl / ⌘ + Z desfaz · Ctrl / ⌘ + S exporta JSON</span>
+        <span className="statusbar-shortcuts">Ctrl / ⌘ + Z desfaz · Ctrl / ⌘ + S exporta JSON</span>
+        <a className="statusbar-link" href="/privacidade.html" target="_blank" rel="noopener noreferrer">
+          Privacidade
+        </a>
       </footer>
 
       {notice && (
