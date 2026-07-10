@@ -26,7 +26,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -36,7 +37,8 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid #2d6caa;
   outline-offset: 2px;
 }
@@ -893,16 +895,28 @@ h2 {
 }
 
 .form-label input,
-.form-label select {
+.form-label select,
+.form-label textarea {
   width: 100%;
-  height: 30px;
-  padding: 0 8px;
   color: #2c4054;
   background: #fff;
   border: 1px solid #cbd6df;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
+}
+
+.form-label input,
+.form-label select {
+  height: 30px;
+  padding: 0 8px;
+}
+
+.form-label textarea {
+  min-height: 66px;
+  padding: 7px 8px;
+  resize: vertical;
+  line-height: 1.42;
 }
 
 .form-label select {
@@ -914,12 +928,14 @@ h2 {
 }
 
 .form-label input:hover,
-.form-label select:hover {
+.form-label select:hover,
+.form-label textarea:hover {
   border-color: #aabac8;
 }
 
 .form-label input:focus,
-.form-label select:focus {
+.form-label select:focus,
+.form-label textarea:focus {
   border-color: #4b83aa;
   outline: 2px solid rgba(75, 131, 170, 0.14);
   outline-offset: 0;
@@ -1216,6 +1232,14 @@ h2 {
   margin-top: 2px;
 }
 
+.documentation-section {
+  background: #fcfdfe;
+}
+
+.documentation-section .section-heading {
+  margin-bottom: 10px;
+}
+
 .relation-chip {
   padding: 3px 6px;
   color: #44677f;
@@ -1247,6 +1271,23 @@ h2 {
   color: #78899a;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.model-selection-hint {
+  padding: 24px 20px 28px;
+  color: #78899a;
+  text-align: center;
+}
+
+.model-selection-hint .inspector-empty-icon {
+  margin-bottom: 8px;
+}
+
+.model-selection-hint p {
+  max-width: 210px;
+  margin: 0 auto;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .statusbar {
@@ -1379,6 +1420,48 @@ h2 {
 
 .confirmation-card {
   width: min(100%, 390px);
+}
+
+.sql-backdrop {
+  z-index: 20;
+}
+
+.sql-dialog-card {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 920px);
+  max-height: calc(100vh - 40px);
+}
+
+.sql-dialog-copy {
+  flex: 0 0 auto;
+}
+
+.sql-preview {
+  min-height: 230px;
+  max-height: min(520px, calc(100vh - 280px));
+  margin: 16px 0 0;
+  padding: 13px 14px;
+  overflow: auto;
+  color: #dce9f3;
+  background: #172b44;
+  border: 1px solid #0e2035;
+  border-radius: 5px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.sql-preview:focus-visible {
+  outline: 2px solid #4b83aa;
+  outline-offset: 2px;
+}
+
+.sql-dialog-actions {
+  flex: 0 0 auto;
+  margin-top: 14px;
 }
 
 .modal-actions {
@@ -1571,12 +1654,14 @@ h2 {
   }
 
   .topbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     margin-left: 0;
   }
 
   .topbar-actions .button {
-    flex: 1;
+    min-width: 0;
     padding: 0 7px;
     font-size: 10px;
   }

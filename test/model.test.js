@@ -6,12 +6,15 @@ function createModelFixture() {
   return {
     version: 1,
     name: 'Modelo de vendas',
+    notes: 'Usado para validar o fluxo de pedidos.',
     tables: [
       {
         id: 'customers',
         name: 'clientes',
         color: '#1f5f7a',
         collapsed: true,
+        comment: 'Cadastro de clientes.',
+        notes: 'Dados sincronizados com o CRM.',
         position: { x: 80, y: 120 },
         fields: [
           {
@@ -23,6 +26,8 @@ function createModelFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            comment: 'Identificador público do cliente.',
+            notes: 'Gerado pela extensão pgcrypto.',
             isForeignKey: false,
             foreignKey: null,
           },
@@ -33,6 +38,8 @@ function createModelFixture() {
         name: 'pedidos',
         color: '#9a5b13',
         collapsed: false,
+        comment: 'Pedidos realizados pelos clientes.',
+        notes: '',
         position: { x: 480, y: 200 },
         fields: [
           {
@@ -44,6 +51,8 @@ function createModelFixture() {
             nullable: false,
             primaryKey: true,
             unique: false,
+            comment: '',
+            notes: '',
             isForeignKey: false,
             foreignKey: null,
           },
@@ -56,6 +65,8 @@ function createModelFixture() {
             nullable: false,
             primaryKey: false,
             unique: true,
+            comment: 'Cliente responsável pelo pedido.',
+            notes: 'Índice adicional pode ser necessário para consultas frequentes.',
             isForeignKey: true,
             foreignKey: {
               tableId: 'customers',
@@ -77,6 +88,7 @@ test('exportação e importação preservam o modelo e a FK', () => {
 
   assert.equal(payload.version, 1)
   assert.equal(payload.exportedAt, '2026-07-09T12:00:00.000Z')
+  assert.equal(payload.notes, 'Usado para validar o fluxo de pedidos.')
   assert.deepEqual(payload.relationships, [{
     id: 'rel_orders_orders_customer_id',
     fromTableId: 'orders',
@@ -93,7 +105,12 @@ test('exportação e importação preservam o modelo e a FK', () => {
 
 test('importa o formato legado com relações separadas', () => {
   const legacy = createModelFixture()
+  delete legacy.notes
+  delete legacy.tables[0].comment
+  delete legacy.tables[0].notes
   delete legacy.tables[0].fields[0].unique
+  delete legacy.tables[0].fields[0].comment
+  delete legacy.tables[0].fields[0].notes
   legacy.tables[1].fields[1].isForeignKey = false
   legacy.tables[1].fields[1].foreignKey = null
   legacy.relationships = [{
@@ -114,6 +131,9 @@ test('importa o formato legado com relações separadas', () => {
     onUpdate: 'NO ACTION',
   })
   assert.equal(imported.tables[0].fields[0].unique, false)
+  assert.equal(imported.notes, '')
+  assert.equal(imported.tables[0].comment, '')
+  assert.equal(imported.tables[0].fields[0].notes, '')
 })
 
 test('normaliza e valida as ações de chave estrangeira', () => {
@@ -154,10 +174,13 @@ test('rejeita versões, relações e FKs inválidas', () => {
   numericForeignKey.tables[1].fields[1].foreignKey = { tableId: 1, fieldId: 2 }
   const invalidUnique = createModelFixture()
   invalidUnique.tables[1].fields[1].unique = 'sim'
+  const invalidComment = createModelFixture()
+  invalidComment.tables[0].comment = { texto: 'inválido' }
 
   assert.throws(() => normalizeModel(missingTables), /lista de tabelas/)
   assert.throws(() => normalizeModel(unsupportedVersion), /não é compatível/)
   assert.throws(() => normalizeModel(danglingReference), /campo inexistente/)
   assert.throws(() => normalizeModel(numericForeignKey), /IDs em texto/)
   assert.throws(() => normalizeModel(invalidUnique), /"unique"/)
+  assert.throws(() => normalizeModel(invalidComment), /"comment"/)
 })

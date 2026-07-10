@@ -9,6 +9,7 @@ import {
   makeId,
   normalizeModel,
 } from './model'
+import { generatePostgresSql } from './sql'
 
 const STORAGE_KEY = 'er-studio:model:v1'
 const STORAGE_NOTICE_KEY = 'er-studio:storage-notice:v1'
@@ -63,12 +64,15 @@ const POSTGRES_TYPE_VALUES = new Set(POSTGRES_FIELD_TYPES.flatMap((group) => gro
 const INITIAL_MODEL = {
   version: 1,
   name: 'Modelo comercial',
+  notes: 'Exemplo inicial para organizar clientes e pedidos.',
   tables: [
     {
       id: 'table_clients',
       name: 'clientes',
       color: '#1f5f7a',
       collapsed: false,
+      comment: 'Cadastro principal de clientes.',
+      notes: 'Dados de contato usados pelo processo comercial.',
       position: { x: 84, y: 106 },
       fields: [
         {
@@ -80,6 +84,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: true,
           unique: false,
+          comment: 'Identificador único do cliente.',
+          notes: '',
           isForeignKey: false,
           foreignKey: null,
         },
@@ -92,6 +98,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          comment: 'Nome completo ou razão social.',
+          notes: '',
           isForeignKey: false,
           foreignKey: null,
         },
@@ -104,6 +112,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          comment: 'E-mail usado para contato.',
+          notes: 'Pode receber uma restrição UNIQUE conforme a regra de negócio.',
           isForeignKey: false,
           foreignKey: null,
         },
@@ -114,6 +124,8 @@ const INITIAL_MODEL = {
       name: 'pedidos',
       color: '#9a5b13',
       collapsed: false,
+      comment: 'Pedidos realizados pelos clientes.',
+      notes: '',
       position: { x: 478, y: 220 },
       fields: [
         {
@@ -125,6 +137,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: true,
           unique: false,
+          comment: 'Identificador único do pedido.',
+          notes: '',
           isForeignKey: false,
           foreignKey: null,
         },
@@ -137,6 +151,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          comment: 'Cliente responsável pelo pedido.',
+          notes: '',
           isForeignKey: true,
           foreignKey: {
             tableId: 'table_clients',
@@ -154,6 +170,8 @@ const INITIAL_MODEL = {
           nullable: false,
           primaryKey: false,
           unique: false,
+          comment: 'Momento de criação do pedido.',
+          notes: 'Armazenado com fuso horário.',
           isForeignKey: false,
           foreignKey: null,
         },
@@ -181,6 +199,45 @@ function shouldShowStorageNotice() {
 
 function fieldDescription(field) {
   return field.size ? `${field.type}(${field.size})` : field.type
+}
+
+function fileStem(name) {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase() || 'modelo-er'
+}
+
+function downloadTextFile(contents, filename, type) {
+  const blob = new Blob([contents], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  textarea.remove()
+  if (!copied) throw new Error('Não foi possível copiar o SQL.')
 }
 
 function findFieldIndex(table, fieldId) {
@@ -459,6 +516,31 @@ function ConfirmDialog({ action, onCancel, onConfirm }) {
   )
 }
 
+function SqlDialog({ sql, onClose, onCopy, onDownload }) {
+  return (
+    <div className="modal-backdrop sql-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal-card sql-dialog-card" role="dialog" aria-modal="true" aria-labelledby="sql-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">POSTGRESQL</p>
+            <h2 id="sql-dialog-title">Script do modelo</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar">×</button>
+        </div>
+        <p className="dialog-copy sql-dialog-copy">
+          O script cria as tabelas, chaves, restrições e comentários do modelo. As observações continuam registradas no JSON do projeto.
+        </p>
+        <pre className="sql-preview" tabIndex="0" aria-label="SQL PostgreSQL gerado"><code>{sql}</code></pre>
+        <div className="modal-actions sql-dialog-actions">
+          <button type="button" className="button secondary" onClick={onClose}>Fechar</button>
+          <button type="button" className="button secondary" onClick={onCopy}>Copiar SQL</button>
+          <button type="button" className="button primary" onClick={onDownload}>Baixar .sql</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TableCard({ table, selected, selectedFieldId, onSelect, onSelectField, onToggleCollapse, onDragStart, onDragMove, onDragEnd }) {
   return (
     <article
@@ -530,6 +612,7 @@ function App() {
   const [importPreview, setImportPreview] = useState(null)
   const [notice, setNotice] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
+  const [isSqlDialogOpen, setIsSqlDialogOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [isStorageNoticeOpen, setIsStorageNoticeOpen] = useState(shouldShowStorageNotice)
   const [isSchemaSidebarVisible, setIsSchemaSidebarVisible] = useState(true)
@@ -551,6 +634,7 @@ function App() {
 
   const relations = useMemo(() => getRelations(model), [model])
   const canvasSize = useMemo(() => getCanvasSize(model.tables), [model.tables])
+  const postgresSql = useMemo(() => generatePostgresSql(model), [model])
 
   useLayoutEffect(() => {
     const scrollContainer = diagramScrollRef.current
@@ -630,7 +714,7 @@ function App() {
     }
 
     if (action.kind === 'new-model') {
-      setModel({ version: 1, name: 'Modelo sem nome', tables: [] })
+      setModel({ version: 1, name: 'Modelo sem nome', notes: '', tables: [] })
       setSelectedTableId(null)
       setSelectedFieldId(null)
       showNotice('success', 'Novo modelo iniciado.')
@@ -704,6 +788,8 @@ function App() {
       name,
       color,
       collapsed: false,
+      comment: '',
+      notes: '',
       position: { x: 72 + (offset % 360), y: 72 + (offset % 260) },
       fields: [
         {
@@ -860,22 +946,22 @@ function App() {
 
   function exportModel() {
     const payload = createExportPayload(model)
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    const filename = model.name
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .toLowerCase() || 'modelo-er'
-    link.href = url
-    link.download = `${filename}.json`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    downloadTextFile(JSON.stringify(payload, null, 2), `${fileStem(model.name)}.json`, 'application/json')
     showNotice('success', 'JSON exportado com o diagrama e as relações.')
+  }
+
+  function downloadPostgresSql() {
+    downloadTextFile(postgresSql, `${fileStem(model.name)}.sql`, 'application/sql')
+    showNotice('success', 'Script SQL baixado.')
+  }
+
+  async function copyPostgresSql() {
+    try {
+      await copyTextToClipboard(postgresSql)
+      showNotice('success', 'SQL copiado para a área de transferência.')
+    } catch {
+      showNotice('error', 'Não foi possível copiar o SQL neste navegador.')
+    }
   }
 
   function readImportFile(event) {
@@ -940,6 +1026,7 @@ function App() {
           <button type="button" className="button secondary" onClick={createNewModel}>Novo</button>
           <button type="button" className="button secondary" onClick={() => importInputRef.current?.click()}>Importar JSON</button>
           <button type="button" className="button primary" onClick={exportModel}>Exportar JSON</button>
+          <button type="button" className="button secondary" onClick={() => setIsSqlDialogOpen(true)}>Gerar SQL</button>
           <input ref={importInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={readImportFile} />
         </div>
       </header>
@@ -1147,13 +1234,33 @@ function App() {
                 <PanelIcon side="right" />
               </button>
               {!selectedTable ? (
-            <div className="inspector-empty">
-              <span className="inspector-empty-icon">⌘</span>
-              <p className="eyebrow">PROPRIEDADES</p>
-              <h2>Selecione uma tabela</h2>
-              <p>Edite o nome e a cor da entidade. Selecione um campo para definir tipo, tamanho, padrão e chaves.</p>
-            </div>
-          ) : (
+                <>
+                  <div className="inspector-heading">
+                    <div>
+                      <p className="eyebrow">PROPRIEDADES</p>
+                      <h2>Modelo</h2>
+                    </div>
+                  </div>
+                  <div className="inspector-content">
+                    <section className="form-section documentation-section">
+                      <div className="section-heading">
+                        <div>
+                          <span className="section-title">Observações do modelo</span>
+                          <span className="section-description">Notas gerais ficam no projeto e no JSON exportado.</span>
+                        </div>
+                      </div>
+                      <label className="form-label">
+                        Observações
+                        <textarea value={model.notes || ''} onChange={(event) => setModel((current) => ({ ...current, notes: event.target.value }))} placeholder="Contexto, decisões e lembretes para este modelo." rows="4" />
+                      </label>
+                    </section>
+                    <div className="model-selection-hint">
+                      <span className="inspector-empty-icon">⌘</span>
+                      <p>Selecione uma tabela ou campo no diagrama para editar suas propriedades.</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
             <>
               <div className="inspector-heading">
                 <div>
@@ -1178,6 +1285,23 @@ function App() {
                       </span>
                     </label>
                     <ColorSwatches value={selectedTable.color} onChange={(color) => patchTable(selectedTable.id, { color })} />
+                  </section>
+
+                  <section className="form-section documentation-section">
+                    <div className="section-heading">
+                      <div>
+                        <span className="section-title">Documentação</span>
+                        <span className="section-description">O comentário é incluído no SQL; observações ficam no projeto.</span>
+                      </div>
+                    </div>
+                    <label className="form-label">
+                      Comentário da tabela
+                      <textarea value={selectedTable.comment || ''} onChange={(event) => patchTable(selectedTable.id, { comment: event.target.value })} placeholder="ex.: Entidades cadastradas no sistema." rows="3" />
+                    </label>
+                    <label className="form-label">
+                      Observações
+                      <textarea value={selectedTable.notes || ''} onChange={(event) => patchTable(selectedTable.id, { notes: event.target.value })} placeholder="Decisões, regras ou pendências desta tabela." rows="3" />
+                    </label>
                   </section>
 
                   <section className="form-section fields-section">
@@ -1240,6 +1364,23 @@ function App() {
                     <label className="form-label default-value-label">
                       Valor padrão
                       <input value={selectedField.defaultValue} onChange={(event) => patchField(selectedTable.id, selectedField.id, { defaultValue: event.target.value })} placeholder="ex.: now()" />
+                    </label>
+                  </section>
+
+                  <section className="form-section documentation-section">
+                    <div className="section-heading">
+                      <div>
+                        <span className="section-title">Documentação</span>
+                        <span className="section-description">O comentário é incluído no SQL; observações ficam no projeto.</span>
+                      </div>
+                    </div>
+                    <label className="form-label">
+                      Comentário do campo
+                      <textarea value={selectedField.comment || ''} onChange={(event) => patchField(selectedTable.id, selectedField.id, { comment: event.target.value })} placeholder="ex.: Identificador do registro." rows="3" />
+                    </label>
+                    <label className="form-label">
+                      Observações
+                      <textarea value={selectedField.notes || ''} onChange={(event) => patchField(selectedTable.id, selectedField.id, { notes: event.target.value })} placeholder="Detalhes técnicos ou regras adicionais." rows="3" />
                     </label>
                   </section>
 
@@ -1360,6 +1501,7 @@ function App() {
       {isAddTableOpen && <AddTableDialog onClose={() => setIsAddTableOpen(false)} onCreate={createTable} />}
       {importPreview && <ImportDialog preview={importPreview} onClose={() => setImportPreview(null)} onConfirm={confirmImport} />}
       {pendingAction && <ConfirmDialog action={pendingAction} onCancel={() => setPendingAction(null)} onConfirm={confirmPendingAction} />}
+      {isSqlDialogOpen && <SqlDialog sql={postgresSql} onClose={() => setIsSqlDialogOpen(false)} onCopy={copyPostgresSql} onDownload={downloadPostgresSql} />}
       {isStorageNoticeOpen && <StorageNoticeDialog onConfirm={dismissStorageNotice} />}
     </main>
   )

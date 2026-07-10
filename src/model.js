@@ -29,6 +29,8 @@ export function emptyField() {
     nullable: true,
     primaryKey: false,
     unique: false,
+    comment: '',
+    notes: '',
     isForeignKey: false,
     foreignKey: null,
   }
@@ -61,6 +63,7 @@ export function createExportPayload(model, exportedAt = new Date().toISOString()
   return {
     version: 1,
     name: model.name,
+    notes: model.notes || '',
     exportedAt,
     tables: model.tables,
     relationships: getRelations(model),
@@ -73,6 +76,14 @@ function readBoolean(value, fallback, label) {
     throw new Error(`O atributo "${label}" precisa ser verdadeiro ou falso.`)
   }
   return value
+}
+
+function readOptionalText(value, label) {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') {
+    throw new Error(`O atributo "${label}" precisa ser um texto.`)
+  }
+  return value.trim()
 }
 
 function readId(value, fallbackPrefix, label) {
@@ -185,6 +196,8 @@ export function normalizeModel(rawModel) {
         nullable: readBoolean(rawField.nullable, true, 'nullable'),
         primaryKey: readBoolean(rawField.primaryKey, false, 'primaryKey'),
         unique: readBoolean(rawField.unique, false, 'unique'),
+        comment: readOptionalText(rawField.comment, 'comment'),
+        notes: readOptionalText(rawField.notes, 'notes'),
         isForeignKey: Boolean(foreignKey),
         foreignKey,
       }
@@ -195,6 +208,8 @@ export function normalizeModel(rawModel) {
       name: rawTable.name.trim(),
       color: typeof rawTable.color === 'string' && rawTable.color.trim() ? rawTable.color : TABLE_COLORS[tableIndex % TABLE_COLORS.length],
       collapsed: readBoolean(rawTable.collapsed, false, 'collapsed'),
+      comment: readOptionalText(rawTable.comment, 'comment'),
+      notes: readOptionalText(rawTable.notes, 'notes'),
       position: {
         x: Number.isFinite(rawTable.position?.x) ? rawTable.position.x : 76 + tableIndex * 44,
         y: Number.isFinite(rawTable.position?.y) ? rawTable.position.y : 82 + tableIndex * 38,
@@ -262,6 +277,7 @@ export function normalizeModel(rawModel) {
   return {
     version: 1,
     name: typeof rawModel.name === 'string' && rawModel.name.trim() ? rawModel.name.trim() : 'Modelo sem nome',
+    notes: readOptionalText(rawModel.notes, 'notes'),
     tables,
   }
 }
