@@ -216,3 +216,7 @@ nginx.conf      # Configuração do servidor web
 
 - O editor não possui autenticação, colaboração em tempo real ou armazenamento remoto.
 - As relações são visualizadas como `N:1`; não há editor independente de cardinalidade nesta versão.
+
+## Licença
+
+Distribuído sob a licença [MIT](LICENSE).
