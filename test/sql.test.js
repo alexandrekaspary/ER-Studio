@@ -143,6 +143,28 @@ test('protege identificadores e normaliza valores inválidos sem quebrar o scrip
   assert.doesNotMatch(sql, /DROP TABLE/)
 })
 
+test('qualifica tabelas com o schema informado e cria o schema quando não é "public"', () => {
+  const sql = generatePostgresSql({
+    schema: 'vendas',
+    tables: [{
+      id: 'orders',
+      name: 'pedidos',
+      indexes: [],
+      fields: [{ id: 'orders_id', name: 'id', type: 'UUID', nullable: false, primaryKey: true, foreignKey: null }],
+    }],
+  })
+
+  assert.match(sql, /CREATE SCHEMA IF NOT EXISTS "vendas";/)
+  assert.match(sql, /CREATE TABLE "vendas"\."pedidos" \(/)
+})
+
+test('não qualifica tabelas nem cria schema quando o schema é o padrão "public"', () => {
+  const sql = generatePostgresSql(createSqlFixture())
+
+  assert.doesNotMatch(sql, /CREATE SCHEMA/)
+  assert.match(sql, /CREATE TABLE "pedidos" \(/)
+})
+
 test('aplica tamanho apenas a tipos PostgreSQL compatíveis', () => {
   const sql = generatePostgresSql({
     tables: [{

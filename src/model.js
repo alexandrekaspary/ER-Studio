@@ -11,6 +11,8 @@ export const TABLE_COLORS = [
 
 export const FOREIGN_KEY_ACTIONS = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT']
 
+export const DEFAULT_SCHEMA = 'public'
+
 export const POSTGRES_TYPES_WITH_SIZE = new Set([
   'BIT',
   'BIT VARYING',
@@ -96,6 +98,7 @@ export function createExportPayload(model, exportedAt = new Date().toISOString()
     version: 1,
     name: model.name,
     notes: model.notes || '',
+    schema: model.schema || DEFAULT_SCHEMA,
     exportedAt,
     tables: model.tables,
     relationships: getRelations(model),
@@ -409,6 +412,7 @@ export function normalizeModel(rawModel) {
     version: 1,
     name: typeof rawModel.name === 'string' && rawModel.name.trim() ? rawModel.name.trim() : 'Modelo sem nome',
     notes: readOptionalText(rawModel.notes, 'notes'),
+    schema: typeof rawModel.schema === 'string' && rawModel.schema.trim() ? rawModel.schema.trim() : DEFAULT_SCHEMA,
     tables,
   }
 }

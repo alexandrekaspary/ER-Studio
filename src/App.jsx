@@ -68,6 +68,7 @@ const INITIAL_MODEL = {
   version: 1,
   name: 'Modelo comercial',
   notes: 'Exemplo inicial para organizar clientes e pedidos.',
+  schema: 'public',
   tables: [
     {
       id: 'table_clients',
@@ -952,7 +953,7 @@ function App() {
     }
 
     if (action.kind === 'new-model') {
-      setModel({ version: 1, name: 'Modelo sem nome', notes: '', tables: [] })
+      setModel({ version: 1, name: 'Modelo sem nome', notes: '', schema: 'public', tables: [] })
       setSelectedTableId(null)
       setSelectedFieldId(null)
       showNotice('success', 'Novo modelo iniciado.')
@@ -1608,6 +1609,28 @@ function App() {
                     </div>
                   </div>
                   <div className="inspector-content">
+                    <section className="form-section">
+                      <div className="section-heading">
+                        <div>
+                          <span className="section-title">Banco de dados</span>
+                          <span className="section-description">Schema usado ao gerar o script SQL.</span>
+                        </div>
+                      </div>
+                      <label className="form-label">
+                        Schema
+                        <input
+                          type="text"
+                          value={model.schema ?? ''}
+                          onChange={(event) => setModel((current) => ({ ...current, schema: event.target.value }))}
+                          onBlur={(event) => {
+                            if (!event.target.value.trim()) {
+                              setModel((current) => ({ ...current, schema: 'public' }))
+                            }
+                          }}
+                          placeholder="public"
+                        />
+                      </label>
+                    </section>
                     <section className="form-section documentation-section">
                       <div className="section-heading">
                         <div>

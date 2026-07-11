@@ -1,9 +1,15 @@
-import { typeSupportsSize } from './model.js'
+import { DEFAULT_SCHEMA, typeSupportsSize } from './model.js'
 
 const FOREIGN_KEY_ACTIONS = new Set(['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'])
 
 function quoteIdentifier(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`
+}
+
+function qualifiedTableName(table, schema) {
+  return schema === DEFAULT_SCHEMA
+    ? quoteIdentifier(table.name)
+    : `${quoteIdentifier(schema)}.${quoteIdentifier(table.name)}`
 }
 
 function quoteLiteral(value) {
@@ -68,7 +74,7 @@ function checkExpression(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function createTableSql(table) {
+function createTableSql(table, schema) {
   const fields = Array.isArray(table.fields) ? table.fields : []
   const columns = fields.map((field) => {
     const parts = [quoteIdentifier(field.name), formatDataType(field)]
@@ -98,10 +104,10 @@ function createTableSql(table) {
     ? `\n  ${columns.join(',\n  ')}\n`
     : ''
 
-  return `CREATE TABLE ${quoteIdentifier(table.name)} (${definition});`
+  return `CREATE TABLE ${qualifiedTableName(table, schema)} (${definition});`
 }
 
-function foreignKeyStatements(tables) {
+function foreignKeyStatements(tables, schema) {
   const tableById = new Map(tables.map((table) => [table.id, table]))
 
   return tables.flatMap((table) => (table.fields || []).flatMap((field) => {
@@ -113,11 +119,11 @@ function foreignKeyStatements(tables) {
     if (!targetTable || !targetField) return []
 
     const name = foreignKeyConstraintName(table, field)
-    return [`ALTER TABLE ${quoteIdentifier(table.name)}\n  ADD CONSTRAINT ${quoteIdentifier(name)}\n  FOREIGN KEY (${quoteIdentifier(field.name)})\n  REFERENCES ${quoteIdentifier(targetTable.name)} (${quoteIdentifier(targetField.name)})\n  ON DELETE ${normalizeAction(foreignKey.onDelete)}\n  ON UPDATE ${normalizeAction(foreignKey.onUpdate)};`]
+    return [`ALTER TABLE ${qualifiedTableName(table, schema)}\n  ADD CONSTRAINT ${quoteIdentifier(name)}\n  FOREIGN KEY (${quoteIdentifier(field.name)})\n  REFERENCES ${qualifiedTableName(targetTable, schema)} (${quoteIdentifier(targetField.name)})\n  ON DELETE ${normalizeAction(foreignKey.onDelete)}\n  ON UPDATE ${normalizeAction(foreignKey.onUpdate)};`]
   }))
 }
 
-function indexStatements(tables) {
+function indexStatements(tables, schema) {
   return tables.flatMap((table) => {
     const fieldsById = new Map((table.fields || []).map((field) => [field.id, field]))
 
@@ -127,25 +133,25 @@ function indexStatements(tables) {
 
       const columns = fields.map((field) => quoteIdentifier(field.name)).join(', ')
       if (index.unique) {
-        return [`ALTER TABLE ${quoteIdentifier(table.name)}\n  ADD CONSTRAINT ${quoteIdentifier(index.name)}\n  UNIQUE (${columns});`]
+        return [`ALTER TABLE ${qualifiedTableName(table, schema)}\n  ADD CONSTRAINT ${quoteIdentifier(index.name)}\n  UNIQUE (${columns});`]
       }
-      return [`CREATE INDEX ${quoteIdentifier(index.name)} ON ${quoteIdentifier(table.name)} (${columns});`]
+      return [`CREATE INDEX ${quoteIdentifier(index.name)} ON ${qualifiedTableName(table, schema)} (${columns});`]
     })
   })
 }
 
-function commentStatements(tables) {
+function commentStatements(tables, schema) {
   return tables.flatMap((table) => {
     const statements = []
     const tableComment = commentText(table.comment)
     if (tableComment) {
-      statements.push(`COMMENT ON TABLE ${quoteIdentifier(table.name)} IS ${quoteLiteral(tableComment)};`)
+      statements.push(`COMMENT ON TABLE ${qualifiedTableName(table, schema)} IS ${quoteLiteral(tableComment)};`)
     }
 
     ;(table.fields || []).forEach((field) => {
       const fieldComment = commentText(field.comment)
       if (fieldComment) {
-        statements.push(`COMMENT ON COLUMN ${quoteIdentifier(table.name)}.${quoteIdentifier(field.name)} IS ${quoteLiteral(fieldComment)};`)
+        statements.push(`COMMENT ON COLUMN ${qualifiedTableName(table, schema)}.${quoteIdentifier(field.name)} IS ${quoteLiteral(fieldComment)};`)
       }
     })
 
@@ -163,20 +169,25 @@ function modelNotesHeader(notes) {
 
 export function generatePostgresSql(model) {
   const tables = Array.isArray(model?.tables) ? model.tables : []
+  const schema = typeof model?.schema === 'string' && model.schema.trim() ? model.schema.trim() : DEFAULT_SCHEMA
   const blocks = ['-- Script PostgreSQL gerado pelo ER Studio.']
   const notesHeader = modelNotesHeader(model?.notes)
   if (notesHeader) blocks.push(notesHeader)
 
-  const tableStatements = tables.map(createTableSql)
+  if (schema !== DEFAULT_SCHEMA) {
+    blocks.push(`CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(schema)};`)
+  }
+
+  const tableStatements = tables.map((table) => createTableSql(table, schema))
   if (tableStatements.length > 0) blocks.push(tableStatements.join('\n\n'))
 
-  const foreignKeys = foreignKeyStatements(tables)
+  const foreignKeys = foreignKeyStatements(tables, schema)
   if (foreignKeys.length > 0) blocks.push(foreignKeys.join('\n\n'))
 
-  const indexes = indexStatements(tables)
+  const indexes = indexStatements(tables, schema)
   if (indexes.length > 0) blocks.push(indexes.join('\n\n'))
 
-  const comments = commentStatements(tables)
+  const comments = commentStatements(tables, schema)
   if (comments.length > 0) blocks.push(comments.join('\n'))
 
   return `${blocks.join('\n\n')}\n`
