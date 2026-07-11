@@ -1,5 +1,7 @@
 # ER Studio
 
+Acesse: [erstudio.com.br](https://erstudio.com.br/)
+
 Editor visual para criar e organizar modelos entidade-relacionamento (ER) de banco de dados. O projeto foi construído com Vite e React e funciona inteiramente no navegador: não há backend obrigatório nem envio automático dos modelos para um servidor.
 
 > **Atenção:** este projeto foi criado com auxílio de IA para testes e prototipagem. Antes de utilizá-lo em um ambiente real, revise o código, as configurações e principalmente o SQL gerado de acordo com as necessidades e regras do seu projeto.
